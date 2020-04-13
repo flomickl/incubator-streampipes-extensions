@@ -21,9 +21,11 @@ package org.apache.streampipes.processors.geo.jvm.jts.processor.trajectory;
 import org.apache.streampipes.logging.api.Logger;
 import org.apache.streampipes.model.runtime.Event;
 import org.apache.streampipes.processors.geo.jvm.jts.helper.SpGeometryBuilder;
+import org.apache.streampipes.processors.geo.jvm.jts.helper.SpTrajectoryBuilder;
 import org.apache.streampipes.wrapper.context.EventProcessorRuntimeContext;
 import org.apache.streampipes.wrapper.routing.SpOutputCollector;
 import org.apache.streampipes.wrapper.runtime.EventProcessor;
+import org.locationtech.jts.geom.LineString;
 import org.locationtech.jts.geom.Point;
 
 
@@ -31,6 +33,8 @@ public class CreateTrajectoryFromPoints implements EventProcessor<CreateTrajecto
 
     private static Logger LOG;
     private CreateTrajectoryFromPointsParameter params;
+    SpTrajectoryBuilder trajectory;
+
 
 
     @Override
@@ -38,25 +42,27 @@ public class CreateTrajectoryFromPoints implements EventProcessor<CreateTrajecto
 
         LOG = params.getGraph().getLogger(CreateTrajectoryFromPointsParameter.class);
         this.params = params;
+
+        trajectory = new SpTrajectoryBuilder(params.getSubpoints(), params.getDescription());
     }
 
     @Override
     public void onEvent(Event in, SpOutputCollector out) {
 
-        Double lat = in.getFieldBySelector(params.getLat()).getAsPrimitive().getAsDouble();
-        Double lng = in.getFieldBySelector(params.getLng()).getAsPrimitive().getAsDouble();
-        Integer epsg_value = in.getFieldBySelector(params.getEpsg_value()).getAsPrimitive().getAsInt();
-        Point geom =  SpGeometryBuilder.createSPGeom(lng, lat, epsg_value);
+        String wkt = in.getFieldBySelector(params.getWkt()).getAsPrimitive().getAsString();
+        Integer epsg = in.getFieldBySelector(params.getEpsg()).getAsPrimitive().getAsInt();
+        Integer m = in.getFieldBySelector(params.getM()).getAsPrimitive().getAsInt();
 
-        if (!geom.isEmpty()){
-            in.addField(CreateTrajectoryFromPointsController.WKT, geom.toString());
-            out.collect(in);
-        } else {
-            LOG.warn("An empty point geometry in " + CreateTrajectoryFromPointsController.EPA_NAME + " is created due" +
-                "invalid input field. Latitude: " + lat + "Longitude: " + lng);
-            LOG.error("Event is filtered out due invalid geometry");
-            
-        }
+        Point eventGeom =  (Point) SpGeometryBuilder.createSPGeom(wkt,epsg);
+
+        //creates single trajectory
+        trajectory.addPointToTrajectory(eventGeom, m);
+        LineString geom = trajectory.returnAsLineString(eventGeom.getFactory());
+
+        in.addField(CreateTrajectoryFromPointsController.WKT, geom.toString());
+        in.addField(CreateTrajectoryFromPointsController.DESCRIPTION, trajectory.getDescription());
+        out.collect(in);
+
     }
 
     @Override
@@ -64,3 +70,4 @@ public class CreateTrajectoryFromPoints implements EventProcessor<CreateTrajecto
 
     }
 }
+

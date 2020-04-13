@@ -34,36 +34,32 @@ import org.apache.streampipes.wrapper.standalone.declarer.StandaloneEventProcess
 public class CreateTrajectoryFromPointsController extends  StandaloneEventProcessingDeclarer<CreateTrajectoryFromPointsParameter> {
 
 
-    public final static String LAT_FIELD = "lat_field";
-    public final static String LNG_FIELD = "lng_field";
+
+    public final static String WKT = "trajectory_wkt";
     public final static String EPSG = "EPSG";
-    public final static String WKT = "geom_wkt";
-    public final static String EPA_NAME = "Create Point from Latitude and Longitude";
+    public final static String M = "M-Value";
+    public final static String DESCRIPTION = "description";
+    public final static String SUBPOINTS = "subpoints";
+
+    public final static String EPA_NAME = "Create Single Trajectory";
 
 
     @Override
     public DataProcessorDescription declareModel() {
         return ProcessingElementBuilder
-                .create("org.apache.streampipes.processors.geo.jvm.jts.processor.latLngToGeo",
+                .create("org.apache.streampipes.processors.geo.jvm.jts.processor.trajectory",
                         EPA_NAME,
-                        "Creates a point geometry from Latitude and Longitude values")
+                        "Creates a trajectory from Points")
                 .category(DataProcessorType.GEO)
                 .withAssets(Assets.DOCUMENTATION, Assets.ICON)
                 .requiredStream(
                         StreamRequirementsBuilder
                                 .create()
                                 .requiredPropertyWithUnaryMapping(
-                                        EpRequirements.numberReq(),
-                                        Labels.from(LAT_FIELD,
-                                                "Latitude field",
-                                                "Latitude value"),
-                                        PropertyScope.NONE
-                                )
-                                .requiredPropertyWithUnaryMapping(
-                                        EpRequirements.numberReq(),
-                                        Labels.from(LNG_FIELD,
-                                                "Longitude field",
-                                                "Longitude value"),
+                                        EpRequirements.stringReq(),
+                                        Labels.from(WKT,
+                                                "Geometry WKT",
+                                                "WKT of the requested Geometry"),
                                         PropertyScope.NONE
                                 )
                                 .requiredPropertyWithUnaryMapping(
@@ -71,15 +67,41 @@ public class CreateTrajectoryFromPointsController extends  StandaloneEventProces
                                         Labels.from(EPSG, "EPSG Field", "EPSG Code for SRID"),
                                         PropertyScope.NONE
                                 )
+                                .requiredPropertyWithUnaryMapping(
+                                        EpRequirements.numberReq(),
+                                        Labels.from(M, "M Value", "Choose a value add to trajectory"),
+                                        PropertyScope.NONE
+                                )
                                 .build()
                 )
-                .outputStrategy(OutputStrategies.append(EpProperties.stringEp(
+                .requiredTextParameter(
                         Labels.from(
-                                "point_wkt",
-                                "wkt",
-                                "wkt point from long lat values"),
-                    WKT,
-                        SO.Text))
+                                DESCRIPTION,
+                                "description of trajectory",
+                                "Add a description for the trajectory")
+                )
+                .requiredIntegerParameter(
+                        Labels.from(
+                                SUBPOINTS,
+                                "number of allowed subpoints",
+                                "Number og allowed subpoints of the trajector"),
+                        5
+                )
+                .outputStrategy(OutputStrategies.append(
+                        EpProperties.stringEp(
+                                Labels.from(
+                                        "trajectory_wkt",
+                                        "trajectory_wkt",
+                                        "trajectory wkt (lineString) of a point stream"),
+                                WKT,
+                                SO.Text),
+                        EpProperties.stringEp(
+                                Labels.from(
+                                        "trajectory_description",
+                                        "trajectory_description",
+                                        "description of trajectory"),
+                                DESCRIPTION,
+                                SO.Text))
                 )
 
                 .supportedFormats(SupportedFormats.jsonFormat())
@@ -92,11 +114,15 @@ public class CreateTrajectoryFromPointsController extends  StandaloneEventProces
     public ConfiguredEventProcessor<CreateTrajectoryFromPointsParameter> onInvocation(DataProcessorInvocation graph, ProcessingElementParameterExtractor extractor) {
 
 
-        String lat = extractor.mappingPropertyValue(LAT_FIELD);
-        String lng = extractor.mappingPropertyValue(LNG_FIELD);
+        String wkt = extractor.mappingPropertyValue(WKT);
         String epsg_value = extractor.mappingPropertyValue(EPSG);
+        String m = extractor.mappingPropertyValue(M);
 
-        CreateTrajectoryFromPointsParameter params = new CreateTrajectoryFromPointsParameter(graph, epsg_value, lat, lng);
+        String description = extractor.singleValueParameter(DESCRIPTION, String.class);
+        Integer subpoints = extractor.singleValueParameter(SUBPOINTS, Integer.class);
+
+
+        CreateTrajectoryFromPointsParameter params = new CreateTrajectoryFromPointsParameter(graph, wkt, epsg_value, description, subpoints, m);
 
         return new ConfiguredEventProcessor<>(params, CreateTrajectoryFromPoints::new);
     }
